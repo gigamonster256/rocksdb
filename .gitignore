@@ -98,3 +98,10 @@ cmake-build-*
 third-party/folly/
 .cache
 *.sublime-*
+
+zlib*
+zstd*
+tkrzw*
+bzip2*
+lz4*
+snappy*

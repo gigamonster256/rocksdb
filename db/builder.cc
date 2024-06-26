@@ -11,6 +11,7 @@
 
 #include <algorithm>
 #include <deque>
+#include <iostream>
 #include <vector>
 
 #include "db/blob/blob_file_builder.h"
@@ -43,6 +44,7 @@
 #include "table/unique_id_impl.h"
 #include "test_util/sync_point.h"
 #include "util/stop_watch.h"
+#include "remap_iterator.h"
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -76,9 +78,16 @@ Status BuildTable(
     BlobFileCompletionCallback* blob_callback, Version* version,
     uint64_t* num_input_entries, uint64_t* memtable_payload_bytes,
     uint64_t* memtable_garbage_bytes) {
+  //std::cerr << "BuildTable" << std::endl;
   assert((tboptions.column_family_id ==
           TablePropertiesCollectorFactory::Context::kUnknownColumnFamily) ==
          tboptions.column_family_name.empty());
+  //std::cerr << "Column family name:" << tboptions.column_family_name << std::endl;
+  //std::cerr << "Column family id:" << tboptions.column_family_id << std::endl;
+  // get column family handle
+  // std::string kdb_test;
+  // // auto h = version->cfd()->GetKeyDB()->Get("__PhysicalKey", &kdb_test);
+  //std::cerr << "Get key db:" << tkrzw::StrToIntBigEndian(kdb_test) << std::endl;
   auto& mutable_cf_options = tboptions.moptions;
   auto& ioptions = tboptions.ioptions;
   // Reports the IOStats for flush for every following bytes.
@@ -210,13 +219,23 @@ Status BuildTable(
     const bool logical_strip_timestamp =
         ts_sz > 0 && !ioptions.persist_user_defined_timestamps;
 
+
+    // extremely thread unsafe
+    auto keydb = version->cfd()->GetKeyDB();
+    SequenceNumber seq = tkrzw::StrToIntBigEndian(keydb->GetSimple("__PhysicalKey"));
+    // SequenceNumber start_seq = seq;
+    RemapIterator r_iter(&c_iter, seq, keydb);
+
     std::string key_after_flush_buf;
     std::string value_buf;
     c_iter.SeekToFirst();
-    for (; c_iter.Valid(); c_iter.Next()) {
-      const Slice& key = c_iter.key();
-      const Slice& value = c_iter.value();
+    for (; r_iter.Valid(); r_iter.Next()) {
+      seq++;
+      const Slice& key = r_iter.key();
+      const Slice& value = r_iter.value();
       ParsedInternalKey ikey = c_iter.ikey();
+      //std::cerr << "BuildTable: key: " << key.ToString(true)
+                //<< " value: " << value.ToString() << std::endl;
       key_after_flush_buf.assign(key.data(), key.size());
       Slice key_after_flush = key_after_flush_buf;
       Slice value_after_flush = value;
@@ -226,6 +245,7 @@ Status BuildTable(
       // minimum timestamp. We update the timestamp here so file boundary and
       // output validator, block builder all see the effect of the stripping.
       if (logical_strip_timestamp) {
+        assert(false);  // This code path is not supported by snapdb
         key_after_flush_buf.clear();
         ReplaceInternalKeyWithMinTimestamp(&key_after_flush_buf, key, ts_sz);
         key_after_flush = key_after_flush_buf;
@@ -244,6 +264,7 @@ Status BuildTable(
               PackValueAndSeqno(unpacked_value, preferred_seqno, &value_buf);
         } else {
           // Cannot get a useful preferred seqno, convert it to a kTypeValue.
+          assert(false);  // This code path is not supported by snapdb
           UpdateInternalKey(&key_after_flush_buf, ikey.sequence, kTypeValue);
           ikey = ParsedInternalKey(ikey.user_key, ikey.sequence, kTypeValue);
           key_after_flush = key_after_flush_buf;
@@ -277,6 +298,12 @@ Status BuildTable(
             ThreadStatus::FLUSH_BYTES_WRITTEN, IOSTATS(bytes_written));
       }
     }
+    
+    // save updated new seq
+    //std::cerr << "Saving new seq: " << seq << std::endl;
+    //std::cerr << "Saved " << seq - start_seq << " keys" << std::endl;
+    keydb->Set("__PhysicalKey", tkrzw::IntToStrBigEndian(seq));
+    
     if (!s.ok()) {
       c_iter.status().PermitUncheckedError();
     } else if (!c_iter.status().ok()) {

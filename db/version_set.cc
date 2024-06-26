@@ -2383,6 +2383,7 @@ void Version::Get(const ReadOptions& read_options, const LookupKey& k,
                   PinnedIteratorsManager* pinned_iters_mgr, bool* value_found,
                   bool* key_exists, SequenceNumber* seq, ReadCallback* callback,
                   bool* is_blob, bool do_merge) {
+  // std::cerr << "Version::Get" << std::endl;
   Slice ikey = k.internal_key();
   Slice user_key = k.user_key();
 

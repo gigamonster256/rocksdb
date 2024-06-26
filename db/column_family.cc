@@ -535,6 +535,8 @@ ColumnFamilyData::ColumnFamilyData(
       name_(name),
       dummy_versions_(_dummy_versions),
       current_(nullptr),
+      keydb_(),
+      //last_seq_flushed_(0),
       refs_(0),
       initialized_(false),
       dropped_(false),
@@ -564,6 +566,7 @@ ColumnFamilyData::ColumnFamilyData(
       db_paths_registered_(false),
       mempurge_used_(false),
       next_epoch_number_(1) {
+  // std::cerr << "Construct ColumnFamilyData" << std::endl;
   if (id_ != kDummyColumnFamilyDataId) {
     // TODO(cc): RegisterDbPaths can be expensive, considering moving it
     // outside of this constructor which might be called with db mutex held.
@@ -577,6 +580,51 @@ ColumnFamilyData::ColumnFamilyData(
           ioptions_.logger,
           "Failed to register data paths of column family (id: %d, name: %s)",
           id_, name_.c_str());
+    }
+    // std::cerr << "ColumnFamilyData::ColumnFamilyData" << std::endl;
+    // std::cerr << this->GetName() << std::endl;
+
+    if (this->GetName() == "default") {
+      // keydb settings
+      const std::map<std::string, std::string> params = {{"dbm", "BabyDBM"}};
+
+      // re-open keydb cache
+      auto kdb_status =
+          keydb_.OpenAdvanced("/mnt/kvs/scratch/rocknewdb/keydb.tkmb", true,
+                              tkrzw::File::OPEN_DEFAULT, params);
+
+      // keydb checking
+      if (kdb_status.IsOK()) {
+        // std::cerr << "keydb open ok" << std::endl;
+      } else {
+        std::string status_str = kdb_status.GetMessage();
+        // std::cerr << "keydb open error: " << status_str << std::endl;
+        exit(-1);
+      }
+
+      std::string gc_pkey_str;
+      auto gc_s = keydb_.Get("__PhysicalKey", &gc_pkey_str);
+      if (gc_s.IsOK()) {
+        // std::cerr << "gc_pkey_str: " << tkrzw::StrToIntBigEndian(gc_pkey_str) << std::endl;
+      } else if (gc_s == tkrzw::Status::Code::NOT_FOUND_ERROR) {
+        // init to 0
+        keydb_.Set("__PhysicalKey", tkrzw::IntToStrBigEndian(0));
+      } else {
+        std::string status_str = gc_s.GetMessage();
+        // std::cerr << "gc_pkey_str error: " << status_str << std::endl;
+        exit(-1);
+      }
+
+      // print entire DB
+      auto it = keydb_.MakeIterator();
+      it->First();
+      while (it->Get() == tkrzw::Status::Code::SUCCESS) {
+        std::string key_str = it->GetKey();
+        std::string value_str = it->GetValue();
+        // std::cerr << "key: " << key_str << ", value: " << value_str << std::endl;
+        it->Next();
+      }
+      it.reset();
     }
   }
   Ref();
@@ -709,6 +757,9 @@ ColumnFamilyData::~ColumnFamilyData() {
           id_, name_.c_str());
     }
   }
+
+  keydb_.Close();
+  // std::cerr << "Destructed ColumnFamilyData" << std::endl;
 }
 
 bool ColumnFamilyData::UnrefAndTryDelete() {

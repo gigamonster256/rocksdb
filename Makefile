@@ -239,7 +239,7 @@ am__v_AR_ = $(am__v_AR_$(AM_DEFAULT_VERBOSITY))
 am__v_AR_0 = @echo "  AR      " $@;
 am__v_AR_1 =
 
-AM_LINK = $(AM_V_CCLD)$(CXX) -L. $(patsubst lib%.a, -l%, $(patsubst lib%.$(PLATFORM_SHARED_EXT), -l%, $^)) $(EXEC_LDFLAGS) -o $@ $(LDFLAGS) $(COVERAGEFLAGS)
+AM_LINK = $(AM_V_CCLD)$(CXX) -L. -ltkrzw $(patsubst lib%.a, -l%, $(patsubst lib%.$(PLATFORM_SHARED_EXT), -l%, $^)) $(EXEC_LDFLAGS) -o $@ $(LDFLAGS) $(COVERAGEFLAGS)
 AM_SHARE = $(AM_V_CCLD) $(CXX) $(PLATFORM_SHARED_LDFLAGS)$@ -L. $(patsubst lib%.$(PLATFORM_SHARED_EXT), -l%, $^) $(EXEC_LDFLAGS) $(LDFLAGS) -o $@
 
 ROCKSDB_PLUGIN_MKS = $(foreach plugin, $(ROCKSDB_PLUGINS), plugin/$(plugin)/*.mk)
@@ -1238,10 +1238,10 @@ clean-not-downloaded-rocksjava:
 	cd java && $(MAKE) clean-not-downloaded
 
 clean-ext-libraries-all:
-	rm -rf bzip2* snappy* zlib* lz4* zstd*
+	rm -rf bzip2* snappy* zlib* lz4* zstd* tkrzw*
 
 clean-ext-libraries-bin:
-	find . -maxdepth 1 -type d \( -name bzip2\* -or -name snappy\* -or -name zlib\* -or -name lz4\* -or -name zstd\* \) -prune -exec rm -rf {} \;
+	find . -maxdepth 1 -type d \( -name bzip2\* -or -name snappy\* -or -name zlib\* -or -name lz4\* -or -name zstd\* -or -name tkrzw\* \) -prune -exec rm -rf {} \;
 
 tags:
 	ctags -R .
@@ -2119,6 +2119,9 @@ LZ4_DOWNLOAD_BASE ?= https://github.com/lz4/lz4/archive
 ZSTD_VER ?= 1.5.5
 ZSTD_SHA256 ?= 98e9c3d949d1b924e28e01eccb7deed865eefebf25c2f21c702e5cd5b63b85e1
 ZSTD_DOWNLOAD_BASE ?= https://github.com/facebook/zstd/archive
+TKRZW_VER ?= 1.0.29
+TKRZW_DOWNLOAD_BASE ?= https://dbmx.net/tkrzw/pkg
+TKRZW_SHA256 ?= abaabd6fc89a19ed8a202ac3711bc3b0763d928bc3a8eeeea73a3679f7e7f790
 CURL_SSL_OPTS ?= --tlsv1
 
 ifeq ($(PLATFORM), OS_MACOSX)
@@ -2239,12 +2242,26 @@ libzstd.a: zstd-$(ZSTD_VER).tar.gz
 	cd zstd-$(ZSTD_VER)/lib && DESTDIR=. PREFIX= $(MAKE) CFLAGS='-fPIC -O2 $(ARCHFLAG) ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}' libzstd.a
 	cp zstd-$(ZSTD_VER)/lib/libzstd.a .
 
+tkrzw-$(TKRZW_VER).tar.gz:
+	curl --fail --output tkrzw-$(TKRZW_VER).tar.gz --location ${CURL_SSL_OPTS} ${TKRZW_DOWNLOAD_BASE}/tkrzw-$(TKRZW_VER).tar.gz
+	TKRZW_SHA256_ACTUAL=`$(SHA256_CMD) tkrzw-$(TKRZW_VER).tar.gz | cut -d ' ' -f 1`; \
+	if [ "$(TKRZW_SHA256)" != "$$ZSTD_SHA256_ACTUAL" ]; then \
+		echo tkrzw-$(TKRZW_VER).tar.gz checksum mismatch, expected=\"$(TKRZW_SHA256)\" actual=\"$$TKRZW_SHA256_ACTUAL\"; \
+		exit 1; \
+	fi
+
+libtkrzw.a: tkrzw-$(TKRZW_VER).tar.gz
+	-rm -rf tkrzw-$(TKRZW_VER)
+	tar xvzf tkrzw-$(TKRZW_VER).tar.gz
+	cd tkrzw-$(TKRZW_VER) && ./configure --enable-opt-native --enable-most-features && DESTDIR=. PREFIX= $(MAKE) CFLAGS='-fPIC -O2 $(ARCHFLAG) ${JAVA_STATIC_DEPS_CCFLAGS} ${EXTRA_CFLAGS}' LDFLAGS='${JAVA_STATIC_DEPS_LDFLAGS} ${EXTRA_LDFLAGS}'
+	cp tkrzw-$(TKRZW_VER)/libtkrzw.a .
+
 # A version of each $(LIB_OBJECTS) compiled with -fPIC and a fixed set of static compression libraries
 ifneq ($(ROCKSDB_JAVA_NO_COMPRESSION), 1)
-JAVA_COMPRESSIONS = libz.a libbz2.a libsnappy.a liblz4.a libzstd.a
+JAVA_COMPRESSIONS = libz.a libbz2.a libsnappy.a liblz4.a libzstd.a libtkrzw.a
 endif
 
-JAVA_STATIC_FLAGS = -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD
+JAVA_STATIC_FLAGS = -DZLIB -DBZIP2 -DSNAPPY -DLZ4 -DZSTD -DTKRZW
 JAVA_STATIC_INCLUDES = -I./zlib-$(ZLIB_VER) -I./bzip2-$(BZIP2_VER) -I./snappy-$(SNAPPY_VER) -I./snappy-$(SNAPPY_VER)/build -I./lz4-$(LZ4_VER)/lib -I./zstd-$(ZSTD_VER)/lib -I./zstd-$(ZSTD_VER)/lib/dictBuilder
 
 ifneq ($(findstring rocksdbjavastatic, $(filter-out rocksdbjavastatic_deps, $(MAKECMDGOALS))),)

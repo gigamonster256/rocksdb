@@ -36,6 +36,7 @@ size_t CompactedDBImpl::FindFile(const Slice& key) {
 Status CompactedDBImpl::Get(const ReadOptions& _read_options,
                             ColumnFamilyHandle*, const Slice& key,
                             PinnableSlice* value, std::string* timestamp) {
+  // std::cerr << "CompactedDBImpl Get called with key: " << key.ToString() << std::endl;
   if (_read_options.io_activity != Env::IOActivity::kUnknown &&
       _read_options.io_activity != Env::IOActivity::kGet) {
     return Status::InvalidArgument(
@@ -91,6 +92,7 @@ Status CompactedDBImpl::Get(const ReadOptions& _read_options,
           /*b_has_ts=*/false) < 0) {
     return Status::NotFound();
   }
+  // std::cerr << "Looking for key: " << key.ToString() << " in table reader" << std::endl;
   Status s = f.fd.table_reader->Get(read_options, lkey.internal_key(),
                                     &get_context, nullptr);
   if (!s.ok() && !s.IsNotFound()) {

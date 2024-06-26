@@ -11,6 +11,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <iostream>
 
 #include "rocksdb/cache.h"
 #include "rocksdb/compression_type.h"

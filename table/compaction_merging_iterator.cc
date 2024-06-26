@@ -276,6 +276,7 @@ void CompactionMergingIterator::Seek(const Slice& target) {
 
 void CompactionMergingIterator::Next() {
   assert(Valid());
+  // std::cerr << "Compaction merging iterator next" << std::endl;
   // For the heap modifications below to be correct, current_ must be the
   // current top of the heap.
   assert(current_ == CurrentForward());

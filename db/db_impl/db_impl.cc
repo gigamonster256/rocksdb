@@ -2052,6 +2052,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options,
 Status DBImpl::Get(const ReadOptions& _read_options,
                    ColumnFamilyHandle* column_family, const Slice& key,
                    PinnableSlice* value, std::string* timestamp) {
+  // std::cerr << "DBImpl::Get of key: " << key.ToString() << std::endl;
   assert(value != nullptr);
   value->Reset();
 
@@ -2338,6 +2339,7 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
   // First look in the memtable, then in the immutable memtable (if any).
   // s is both in/out. When in, s could either be OK or MergeInProgress.
   // merge_operands will contain the sequence of merges in the latter case.
+  // std::cerr << "DBImpl::GetImpl: key: " << key.ToString() << std::endl;
   LookupKey lkey(key, snapshot, read_options.timestamp);
   PERF_TIMER_STOP(get_snapshot_time);
 
@@ -2404,13 +2406,40 @@ Status DBImpl::GetImpl(const ReadOptions& read_options, const Slice& key,
       return s;
     }
   }
+  // std::cerr << "DBImpl::GetImpl: " << (done ? "Found" : "Missing")
+  //           << " in memtable" << std::endl;
   TEST_SYNC_POINT("DBImpl::GetImpl:PostMemTableGet:0");
   TEST_SYNC_POINT("DBImpl::GetImpl:PostMemTableGet:1");
   PinnedIteratorsManager pinned_iters_mgr;
   if (!done) {
+    // print cfd name
+    // std::cerr << "CFD name: " << cfd->GetName() << std::endl;
+    // std::cerr << "CFD is dummy: "
+    //           << (cfd->GetID() ==
+    //                       rocksdb::ColumnFamilyData::kDummyColumnFamilyDataId
+    //                   ? "true"
+    //                   : "false")
+    //           << std::endl;
+    // if we get here then we need to look for the mapped key instead
+    auto keydb = cfd->GetKeyDB();
+    
+
+    // std::cerr << "Looking in keydb for key: " << key.ToString(true)
+    //           << std::endl;
+    std::string pkey;
+    auto status = keydb->Get(key.ToStringView(), &pkey);
+    if (!status.IsOK()) {
+      // print status
+      // std::cerr << "Could not find pkey in keydb" << std::endl;
+      // std::cerr << "Status: " << status.GetCode() << std::endl;
+      ReturnAndCleanupSuperVersion(cfd, sv);
+      return Status::NotFound();
+    }
+    // std::cerr << "DBImpl::GetImpl: pkey: " << Slice(pkey).ToStringView() << std::endl;
+    LookupKey mappedlkey(pkey, snapshot, read_options.timestamp);
     PERF_TIMER_GUARD(get_from_output_files_time);
     sv->current->Get(
-        read_options, lkey, get_impl_options.value, get_impl_options.columns,
+        read_options, mappedlkey, get_impl_options.value, get_impl_options.columns,
         timestamp, &s, &merge_context, &max_covering_tombstone_seq,
         &pinned_iters_mgr,
         get_impl_options.get_value ? get_impl_options.value_found : nullptr,

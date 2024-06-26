@@ -25,6 +25,7 @@
 #include "rocksdb/db.h"
 #include "rocksdb/env.h"
 #include "rocksdb/options.h"
+#include "tkrzw_dbm_poly.h"
 #include "trace_replay/block_cache_tracer.h"
 #include "util/cast_util.h"
 #include "util/hash_containers.h"
@@ -568,6 +569,8 @@ class ColumnFamilyData {
   // of its files (if missing)
   void RecoverEpochNumbers();
 
+  tkrzw::PolyDBM* GetKeyDB() { return &keydb_; };
+
  private:
   friend class ColumnFamilySet;
   ColumnFamilyData(uint32_t id, const std::string& name,
@@ -587,6 +590,10 @@ class ColumnFamilyData {
   const std::string name_;
   Version* dummy_versions_;  // Head of circular doubly-linked list of versions.
   Version* current_;         // == dummy_versions->prev_
+
+  tkrzw::PolyDBM keydb_;  // PolyDBM instance for this column family
+  //SequenceNumber last_seq_flushed_;
+  //std::atomic<SequenceNumber> last_seq_flushed_;
 
   std::atomic<int> refs_;  // outstanding references to ColumnFamilyData
   std::atomic<bool> initialized_;

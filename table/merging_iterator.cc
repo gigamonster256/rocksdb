@@ -346,6 +346,7 @@ class MergingIterator : public InternalIterator {
   }
 
   void Next() override {
+    // std::cerr << "MergingIterator::Next()" << std::endl;
     assert(Valid());
     // Ensure that all children are positioned after key().
     // If we are moving in the forward direction, it is already

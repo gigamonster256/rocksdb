@@ -46,6 +46,7 @@
 #include "util/coding.h"
 #include "util/mutexlock.h"
 #include "util/stop_watch.h"
+#include <iostream>
 
 namespace ROCKSDB_NAMESPACE {
 
@@ -219,6 +220,7 @@ void FlushJob::PickMemTable() {
 Status FlushJob::Run(LogsWithPrepTracker* prep_tracker, FileMetaData* file_meta,
                      bool* switched_to_mempurge, bool* skipped_since_bg_error,
                      ErrorHandler* error_handler) {
+  // std::cerr << "FlushJob::Run" << std::endl;
   TEST_SYNC_POINT("FlushJob::Start");
   db_mutex_->AssertHeld();
   assert(pick_memtable_called);
@@ -290,6 +292,7 @@ Status FlushJob::Run(LogsWithPrepTracker* prep_tracker, FileMetaData* file_meta,
     s = Status::OK();
   } else {
     // This will release and re-acquire the mutex.
+    // std::cerr << "FlushJob::Run:WriteLevel0Table" << std::endl;
     s = WriteLevel0Table();
   }
 
